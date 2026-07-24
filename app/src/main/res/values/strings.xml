@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Pelis28</string>
+    <string name="target_url">https://repelis28.org/peliculas</string>
+</resources>
