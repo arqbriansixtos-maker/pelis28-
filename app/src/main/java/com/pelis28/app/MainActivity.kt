@@ -47,12 +47,14 @@ class MainActivity : AppCompatActivity() {
         "bluekai.com", "demdex.net", "everesttech.net", "turn.com",
         "mathtag.com", "serving-sys.com", "bidswitch.net", "sharethrough.com",
         "teads.tv", "prebid.org", "adition.com", "adform.net",
-        "amazon-adsystem.com", "aps.amazon.com", "simpli.fi",
+        "amazon-adsystem.com", "aps.amazon.com", "amazonadsi.com",
+        "amazon.com", "amazonaws.com", "amzn.to", "amzn.com",
+        "simpli.fi",
         "yieldmo.com", "sonobi.com", "nativo.com", "connatix.com",
         "confiant-integrations.net", "geoedge.be", "doubleverify.com",
         "adsafeprotected.com", "indexww.com", "33across.com",
         "chartbeat.com", "parsely.com", "hotjar.com", "clarity.ms",
-        "facebook.com/tr", "facebook.net", "twitter.com/i/adsct",
+        "facebook.com", "facebook.net", "twitter.com",
         "snap.licdn.com", "bat.bing.com", "onetrust.com", "cookielaw.org",
         "popcash.net", "popmyads.com", "monetag.com",
         "trafficstars.com", "zedo.com", "infolinks.com",
@@ -62,11 +64,8 @@ class MainActivity : AppCompatActivity() {
         "jsecoin.com", "browsermine.com",
         "ad-maven.com", "ad-shield.io", "coinnebula.com",
         "sh.st", "ouo.io", "bc.vc", "shorte.st", "adfoc.us",
-        "linkbucks.com", "adition.com",
+        "linkbucks.com",
         "bit.ly", "t.co",
-        "googletagmanager.com/gtm.js",
-        "googlesyndication.com/pagead",
-        "amazon-adsystem.com/aax2",
         "imasdk.googleapis.com",
         "jivox.com", "spotxchange.com",
         "stickyadstv.com", "tribalfusion.com",
@@ -81,7 +80,9 @@ class MainActivity : AppCompatActivity() {
         "voluum.com", "zpushkovn.com",
         "casino", "casinoo", "bet365", "betsson", "pokerstars",
         "1xbet", "betway", "draftkings", "fanduel",
-        "yahoo.com", "bing.com/search"
+        "yahoo.com", "bing.com/search",
+        "csgo", "gambling", "slot", "roulette", "blackjack",
+        "pachislot", "bonos", "apostas"
     )
 
     private val adUrlPatterns = listOf(
@@ -267,13 +268,31 @@ class MainActivity : AppCompatActivity() {
 
                 if (url.startsWith("javascript:")) return false
 
+                val esRepelis = host.endsWith("repelis28.org")
+                if (esRepelis) return false
+
+                val esRecursoEstatico = url.contains("fonts.googleapis.com") ||
+                    url.contains("fonts.gstatic.com") ||
+                    url.contains("cdnjs.cloudflare.com") ||
+                    url.contains("cdn.jsdelivr.net") ||
+                    url.contains("vimeo.com") ||
+                    url.contains("vimeocdn.com") ||
+                    url.contains("vidhide") ||
+                    url.contains("streamwish") ||
+                    url.contains("voe.sx") ||
+                    url.contains("voeunblock") ||
+                    url.endsWith(".css") ||
+                    url.endsWith(".png") ||
+                    url.endsWith(".jpg") ||
+                    url.endsWith(".svg") ||
+                    url.endsWith(".woff") ||
+                    url.endsWith(".woff2")
+                if (esRecursoEstatico) return false
+
                 val esAd = adHostFragments.any { host.contains(it) }
                 if (esAd) return true
 
-                val esAdUrl = adUrlPatterns.any { url.contains(it) }
-                if (esAdUrl) return true
-
-                return false
+                return true
             }
 
             override fun shouldInterceptRequest(
@@ -295,6 +314,18 @@ class MainActivity : AppCompatActivity() {
                     return super.shouldInterceptRequest(view, request)
                 }
 
+                val esRecursoOk = url.contains("vimeo.com") ||
+                    url.contains("vimeocdn.com") ||
+                    url.contains("vidhide") ||
+                    url.contains("streamwish") ||
+                    url.contains("voe.sx") ||
+                    url.contains("voeunblock") ||
+                    url.contains("fonts.googleapis.com") ||
+                    url.contains("fonts.gstatic.com")
+                if (esRecursoOk) {
+                    return super.shouldInterceptRequest(view, request)
+                }
+
                 val esAd = adHostFragments.any { host.contains(it) }
                 if (esAd) {
                     return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
@@ -305,12 +336,11 @@ class MainActivity : AppCompatActivity() {
                     return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
                 }
 
-                val esTracker = url.contains("facebook.com/tr") ||
+                val esTracker = url.contains("facebook.com") ||
                     url.contains("adsbygoogle") ||
                     url.contains("imasdk") ||
                     url.contains("googlesyndication") ||
                     url.contains("/vast.xml") ||
-                    url.contains("/vast2.xml") ||
                     url.contains("doubleclick.net") ||
                     url.contains("/preroll") ||
                     url.contains("/midroll") ||
@@ -318,7 +348,12 @@ class MainActivity : AppCompatActivity() {
                     url.contains("prebid") ||
                     url.contains("/ad_break") ||
                     url.contains("/vast") ||
-                    url.contains("/vpaid")
+                    url.contains("/vpaid") ||
+                    url.contains("amazon") ||
+                    url.contains("casino") ||
+                    url.contains("bet") ||
+                    url.contains("slot") ||
+                    url.contains("poker")
 
                 if (esTracker) {
                     return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
@@ -457,6 +492,41 @@ class MainActivity : AppCompatActivity() {
                                 }
                             });
                         }
+
+                        var origAssign = window.location.assign;
+                        window.location.assign = function(url) {
+                            var s = (url || '').toLowerCase();
+                            if (s.indexOf('amazon') !== -1 || s.indexOf('casino') !== -1 ||
+                                s.indexOf('bet') !== -1 || s.indexOf('poker') !== -1 ||
+                                s.indexOf('slot') !== -1) return;
+                            origAssign.call(window.location, url);
+                        };
+
+                        var origReplace = window.location.replace;
+                        window.location.replace = function(url) {
+                            var s = (url || '').toLowerCase();
+                            if (s.indexOf('amazon') !== -1 || s.indexOf('casino') !== -1 ||
+                                s.indexOf('bet') !== -1 || s.indexOf('poker') !== -1 ||
+                                s.indexOf('slot') !== -1) return;
+                            origReplace.call(window.location, url);
+                        };
+
+                        document.addEventListener('click', function(e) {
+                            var el = e.target;
+                            while (el && el !== document) {
+                                if (el.tagName === 'A') {
+                                    var href = (el.href || '').toLowerCase();
+                                    if (href.indexOf('amazon') !== -1 || href.indexOf('casino') !== -1 ||
+                                        href.indexOf('bet') !== -1 || href.indexOf('poker') !== -1 ||
+                                        href.indexOf('slot') !== -1 || el.target === '_blank') {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        return false;
+                                    }
+                                }
+                                el = el.parentNode;
+                            }
+                        }, true);
                     } catch(e) {}
                 }
 
