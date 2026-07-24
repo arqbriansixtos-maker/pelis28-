@@ -10,9 +10,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Button
 import android.widget.FrameLayout
-import android.widget.LinearLayout
 import android.widget.ProgressBar
 import androidx.appcompat.app.AppCompatActivity
 import java.io.ByteArrayInputStream
@@ -22,13 +20,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var fullscreenContainer: FrameLayout
     private lateinit var progressBar: ProgressBar
-    private lateinit var tvControls: LinearLayout
-    private lateinit var btnPlayPause: Button
-    private lateinit var btnFullscreen: Button
 
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
-    private var controlsVisible = false
 
     private val targetUrl = "https://repelis28.org/peliculas"
 
@@ -140,71 +134,9 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webView)
         fullscreenContainer = findViewById(R.id.fullscreenContainer)
         progressBar = findViewById(R.id.progressBar)
-        tvControls = findViewById(R.id.tvControls)
-        btnPlayPause = findViewById(R.id.btnPlayPause)
-        btnFullscreen = findViewById(R.id.btnFullscreen)
-
-        btnPlayPause.setOnClickListener {
-            webView.evaluateJavascript(
-                """
-                (function() {
-                    var v = document.querySelector('video');
-                    if (v) {
-                        if (v.paused) v.play(); else v.pause();
-                        return;
-                    }
-                    var iframes = document.querySelectorAll('iframe');
-                    for (var i = 0; i < iframes.length; i++) {
-                        var src = (iframes[i].src || '').toLowerCase();
-                        if (src.indexOf('vimeo') !== -1 || src.indexOf('player') !== -1) {
-                            try { iframes[i].contentWindow.postMessage(JSON.stringify({method:'getPaused'}), '*'); } catch(e) {}
-                        }
-                    }
-                    window.addEventListener('message', function onVimeoResp(e) {
-                        try {
-                            var d = JSON.parse(e.data);
-                            if (d.event === 'pause') {
-                                for (var j = 0; j < iframes.length; j++) {
-                                    iframes[j].contentWindow.postMessage(JSON.stringify({method:'play'}), '*');
-                                }
-                            } else if (d.event === 'play') {
-                                for (var j = 0; j < iframes.length; j++) {
-                                    iframes[j].contentWindow.postMessage(JSON.stringify({method:'pause'}), '*');
-                                }
-                            }
-                        } catch(ex) {}
-                    }, {once: true});
-                })();
-                """.trimIndent(), null
-            )
-            updatePlayPauseButton()
-        }
-
-        btnFullscreen.setOnClickListener {
-            webView.webChromeClient?.onShowCustomView(webView, object : WebChromeClient.CustomViewCallback {
-                override fun onCustomViewHidden() {}
-            })
-        }
 
         configurarWebView()
         webView.loadUrl(targetUrl)
-    }
-
-    private fun updatePlayPauseButton() {
-        webView.evaluateJavascript(
-            """
-            (function(){
-                var v = document.querySelector('video');
-                if (v) return !v.paused;
-                var iframes = document.querySelectorAll('iframe[src*="vimeo"]');
-                if (iframes.length > 0) return 'vimeo';
-                return false;
-            })();
-            """.trimIndent()
-        ) { result ->
-            val playing = result?.contains("true") == true
-            btnPlayPause.text = if (playing) "\u23F8" else "\u25B6"
-        }
     }
 
     private fun toggleFullscreen() {
@@ -217,17 +149,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showControls() {
-        controlsVisible = true
-        tvControls.visibility = View.VISIBLE
-        updatePlayPauseButton()
-    }
-
-    private fun hideControls() {
-        controlsVisible = false
-        tvControls.visibility = View.GONE
-    }
-
     @SuppressLint("SetJavaScriptEnabled")
     private fun configurarWebView() {
         val settings: WebSettings = webView.settings
@@ -238,7 +159,7 @@ class MainActivity : AppCompatActivity() {
         settings.loadWithOverviewMode = true
         settings.useWideViewPort = true
         settings.mediaPlaybackRequiresUserGesture = false
-        settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+        settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         settings.cacheMode = WebSettings.LOAD_DEFAULT
         settings.userAgentString = settings.userAgentString + " Pelis28/1.0"
 
@@ -259,7 +180,7 @@ class MainActivity : AppCompatActivity() {
                 inyectarBloqueoAds()
                 inyectarNavegacionTV()
                 inyectarAutoPlay()
-                showControls()
+                webView.requestFocus()
             }
 
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
@@ -565,31 +486,67 @@ class MainActivity : AppCompatActivity() {
                 var style = document.createElement('style');
                 style.id = '__tv_nav_style';
                 style.textContent = '\
-                    .tv-focus{outline:4px solid #00e5ff !important;outline-offset:3px !important;border-radius:4px !important;box-shadow:0 0 12px rgba(0,229,255,0.5) !important;}\
+                    .tv-focus{outline:4px solid #00e5ff !important;outline-offset:3px !important;border-radius:4px !important;box-shadow:0 0 12px rgba(0,229,255,0.5) !important;z-index:999999 !important;position:relative !important;}\
+                    .tv-focus-scroll{scroll-behavior:smooth !important;}\
+                    *{scroll-behavior:auto !important;}\
+                    [tabindex="-1"]{tabindex:0 !important;}\
+                    [role="button"]:not([tabindex]),[role="link"]:not([tabindex]),[role="tab"]:not([tabindex]),[role="menuitem"]:not([tabindex]){tabindex:0 !important;}\
+                    a:not([tabindex]):not([href=""]),button:not([tabindex]),input:not([tabindex]),select:not([tabindex]),textarea:not([tabindex]),div[onclick]:not([tabindex]),span[onclick]:not([tabindex]),li[onclick]:not([tabindex]),img[onclick]:not([tabindex]){tabindex:0 !important;}\
                 ';
                 document.head.appendChild(style);
 
-                var SEL = 'a[href], button, input, select, textarea, [tabindex], [onclick], [role="button"], [role="link"], [role="tab"], [role="menuitem"], .card, .item, .poster, .movie, .film, .episode, .server, .btn, .play-btn, .play-button, .source-btn, .video-btn, [class*="play"], [class*="btn"], [class*="card"], [class*="poster"], [class*="movie"], [class*="episode"], [class*="server"], [class*="item"], li a, nav a, .nav-link, .menu-item, .dropdown-item, [class*="nav"] a, [class*="menu"] a';
+                var SEL = [
+                    'a[href]', 'button', 'input:not([type="hidden"])', 'select', 'textarea',
+                    '[tabindex]', '[onclick]',
+                    '[role="button"]', '[role="link"]', '[role="tab"]', '[role="menuitem"]',
+                    '[role="option"]', '[role="radio"]', '[role="checkbox"]',
+                    '.card', '.item', '.poster', '.movie', '.film', '.episode',
+                    '.server', '.source', '.option',
+                    '.btn', '.play-btn', '.play-button', '.source-btn', '.video-btn',
+                    '.nav-link', '.menu-item', '.dropdown-item',
+                    'li a', 'nav a',
+                    '[class*="play"]', '[class*="btn"]', '[class*="card"]',
+                    '[class*="poster"]', '[class*="movie"]', '[class*="episode"]',
+                    '[class*="server"]', '[class*="source"]', '[class*="item"]',
+                    '[class*="nav"] a', '[class*="menu"] a',
+                    'img[src]', 'img[onclick]', 'div[style*="background-image"]',
+                    '[class*="tab"]', '[class*="filter"]',
+                    '.pagination a', '.page-link', '[class*="page"]'
+                ].join(', ');
 
                 function elementosFocables() {
                     return Array.prototype.slice.call(
                         document.querySelectorAll(SEL)
                     ).filter(function(el) {
-                        var r = el.getBoundingClientRect();
-                        var s = window.getComputedStyle(el);
-                        return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
+                        try {
+                            var r = el.getBoundingClientRect();
+                            var s = window.getComputedStyle(el);
+                            if (r.width <= 0 || r.height <= 0) return false;
+                            if (s.display === 'none' || s.visibility === 'hidden') return false;
+                            if (parseFloat(s.opacity) === 0) return false;
+                            if (el.disabled) return false;
+                            if (el.tagName === 'INPUT' && el.type === 'hidden') return false;
+                            return true;
+                        } catch(ex) { return false; }
                     });
                 }
 
                 var actual = null;
 
                 function marcarFoco(el) {
-                    if (actual) actual.classList.remove('tv-focus');
+                    if (actual) {
+                        actual.classList.remove('tv-focus');
+                        actual.removeAttribute('data-tv-focus');
+                    }
                     actual = el;
                     if (actual) {
                         actual.classList.add('tv-focus');
-                        actual.scrollIntoView({block: 'center', inline: 'center', behavior: 'smooth'});
-                        actual.focus();
+                        actual.setAttribute('data-tv-focus', 'true');
+                        try {
+                            actual.scrollIntoView({block: 'center', inline: 'center', behavior: 'instant'});
+                        } catch(ex) {}
+                        try { actual.focus({preventScroll: true}); } catch(ex) {}
+                        try { actual.focus(); } catch(ex) {}
                     }
                 }
 
@@ -598,81 +555,118 @@ class MainActivity : AppCompatActivity() {
                     return {x: r.left + r.width / 2, y: r.top + r.height / 2};
                 }
 
+                function enPantalla(el) {
+                    var r = el.getBoundingClientRect();
+                    return r.bottom > 0 && r.top < window.innerHeight &&
+                           r.right > 0 && r.left < window.innerWidth;
+                }
+
                 function moverFoco(direccion) {
                     var candidatos = elementosFocables();
                     if (!candidatos.length) return;
 
                     if (!actual || candidatos.indexOf(actual) === -1) {
-                        marcarFoco(candidatos[0]);
+                        var primerVisible = candidatos.find(function(el) { return enPantalla(el); });
+                        marcarFoco(primerVisible || candidatos[0]);
                         return;
                     }
 
                     var origen = centro(actual);
-                    var mejor = null, mejorScore = -Infinity;
+                    var mejor = null;
+                    var mejorScore = -Infinity;
 
                     candidatos.forEach(function(el) {
                         if (el === actual) return;
+
                         var p = centro(el);
                         var dx = p.x - origen.x;
                         var dy = p.y - origen.y;
                         var dist = Math.sqrt(dx * dx + dy * dy);
 
+                        if (dist < 5) return;
+
+                        var angulo = Math.atan2(dy, dx) * 180 / Math.PI;
+
                         var valido = false;
-                        if (direccion === 'up' && dy < -10) valido = true;
-                        if (direccion === 'down' && dy > 10) valido = true;
-                        if (direccion === 'left' && dx < -10) valido = true;
-                        if (direccion === 'right' && dx > 10) valido = true;
+                        var tolerancia = 60;
+
+                        if (direccion === 'up' && angulo < -90 + tolerancia && angulo > -90 - tolerancia) valido = true;
+                        if (direccion === 'down' && angulo > 90 - tolerancia && angulo < 90 + tolerancia) valido = true;
+                        if (direccion === 'left' && (angulo > 180 - tolerancia || angulo < -180 + tolerancia || (angulo > -180 && angulo < -180 + tolerancia))) valido = true;
+                        if (direccion === 'right' && angulo > -tolerancia && angulo < tolerancia) valido = true;
+
+                        if (!valido) {
+                            if (direccion === 'up' && dy < -5) valido = true;
+                            if (direccion === 'down' && dy > 5) valido = true;
+                            if (direccion === 'left' && dx < -5) valido = true;
+                            if (direccion === 'right' && dx > 5) valido = true;
+                        }
 
                         if (!valido) return;
 
-                        var score = -dist;
+                        var enPant = enPantalla(el) ? 1000 : 0;
+                        var score = enPant - dist;
                         if (score > mejorScore) { mejorScore = score; mejor = el; }
                     });
 
                     if (mejor) marcarFoco(mejor);
                 }
 
-                function autoFullscreen() {
-                    var videos = document.querySelectorAll('video');
-                    for (var i = 0; i < videos.length; i++) {
-                        var v = videos[i];
-                        if (v._tvFullscreenBinded) continue;
-                        v._tvFullscreenBinded = true;
-
-                        v.addEventListener('playing', function() {
-                            try {
-                                var container = this.closest('.player, .video-player, [class*="player"], [id*="player"]') || this.parentElement;
-                                if (container && !document.fullscreenElement && !document.webkitFullscreenElement) {
-                                    if (container.requestFullscreen) container.requestFullscreen();
-                                    else if (container.webkitRequestFullscreen) container.webkitRequestFullscreen();
-                                }
-                            } catch(e) {}
-                        });
-                    }
-                }
-
                 window.__tvNav = {
                     move: moverFoco,
                     click: function() {
-                        if (actual) actual.click();
-                    }
+                        if (actual) {
+                            actual.click();
+                            var link = actual.querySelector('a');
+                            if (link) link.click();
+                        }
+                    },
+                    getActual: function() { return actual; }
                 };
 
-                autoFullscreen();
                 marcarFoco(elementosFocables()[0]);
 
+                var lastScroll = 0;
+                var scrollCheckCount = 0;
+
                 var obs = new MutationObserver(function() {
-                    setTimeout(autoFullscreen, 1000);
-                    setTimeout(function() {
-                        var nuevo = elementosFocables();
-                        if (actual && nuevo.indexOf(actual) === -1 && nuevo.length > 0) {
-                            marcarFoco(nuevo[0]);
+                    scrollCheckCount++;
+                    if (scrollCheckCount % 5 === 0) {
+                        var nuevos = elementosFocables();
+                        if (actual && nuevos.indexOf(actual) === -1 && nuevos.length > 0) {
+                            var masCercano = null;
+                            var menorDist = Infinity;
+                            nuevos.forEach(function(el) {
+                                var r = el.getBoundingClientRect();
+                                var d = Math.abs(r.top - window.innerHeight / 2);
+                                if (d < menorDist) { menorDist = d; masCercano = el; }
+                            });
+                            marcarFoco(masCercano);
                         }
-                    }, 500);
+                    }
                 });
                 obs.observe(document.body || document.documentElement, {childList: true, subtree: true});
 
-                setInterval(autoFullscreen, 3000);
+                window.addEventListener('scroll', function() {
+                    var now = Date.now();
+                    if (now - lastScroll > 300) {
+                        lastScroll = now;
+                        if (actual && !enPantalla(actual)) {
+                            var nuevos = elementosFocables();
+                            var masCercano = null;
+                            var menorDist = Infinity;
+                            nuevos.forEach(function(el) {
+                                var r = el.getBoundingClientRect();
+                                var centroY = r.top + r.height / 2;
+                                var centroX = r.left + r.width / 2;
+                                var d = Math.abs(centroX - window.innerWidth / 2) + Math.abs(centroY - window.innerHeight / 2);
+                                if (d < menorDist) { menorDist = d; masCercano = el; }
+                            });
+                            if (masCercano) marcarFoco(masCercano);
+                        }
+                    }
+                }, {passive: true});
+
             })();
         """.trimIndent()
         webView.evaluateJavascript(js, null)
@@ -704,7 +698,7 @@ class MainActivity : AppCompatActivity() {
 
                             var esSpanishMain = (texto.includes('spanish') && texto.includes('main')) ||
                                 (texto.includes('español') && texto.includes('main')) ||
-                                texto.includes('⚡') && texto.includes('spanish') ||
+                                texto.includes('\u26A1') && texto.includes('spanish') ||
                                 clase.includes('spanish') && clase.includes('main') ||
                                 (texto.includes('span') && texto.includes('main'));
 
@@ -719,7 +713,7 @@ class MainActivity : AppCompatActivity() {
                                 var el = todos[i];
                                 var texto = el.textContent.toLowerCase().trim();
                                 var esSpanish = texto.includes('spanish') || texto.includes('español') ||
-                                    texto.includes('latino') || texto.includes('⚡');
+                                    texto.includes('latino') || texto.includes('\u26A1');
                                 if (esSpanish && !el._autoClicked) {
                                     mejorBtn = el;
                                     break;
@@ -792,11 +786,21 @@ class MainActivity : AppCompatActivity() {
 
                 function cerrarPopups() {
                     try {
-                        var modals = document.querySelectorAll('.modal.show, .modal[style*="display: block"], .popup, [role="dialog"]');
+                        var modals = document.querySelectorAll('.modal.show, .modal[style*="display: block"], .popup, [role="dialog"], [role="alertdialog"]');
                         for (var i = modals.length - 1; i >= 0; i--) {
-                            var btn = modals[i].querySelector('.close, [class*="close"], [aria-label="Close"]');
+                            var btn = modals[i].querySelector('.close, [class*="close"], [aria-label="Close"], [aria-label="Cerrar"]');
                             if (btn) btn.click();
                             else modals[i].style.display = 'none';
+                        }
+
+                        var overlays = document.querySelectorAll('[class*="overlay"], [class*="backdrop"]');
+                        for (var i = overlays.length - 1; i >= 0; i--) {
+                            var s = window.getComputedStyle(overlays[i]);
+                            if (s.position === 'fixed' || s.position === 'absolute') {
+                                if (overlays[i].querySelector('video') === null) {
+                                    overlays[i].style.display = 'none';
+                                }
+                            }
                         }
                     } catch(e) {}
                 }
@@ -808,6 +812,7 @@ class MainActivity : AppCompatActivity() {
                 var obs = new MutationObserver(function() {
                     setTimeout(autoSeleccionarServidor, 200);
                     setTimeout(autoReproducir, 400);
+                    setTimeout(cerrarPopups, 100);
                 });
                 obs.observe(document.body || document.documentElement, {childList: true, subtree: true});
 
@@ -827,37 +832,17 @@ class MainActivity : AppCompatActivity() {
                     webView.webChromeClient?.onHideCustomView()
                     return true
                 }
-                if (controlsVisible) {
-                    hideControls()
-                    return true
-                }
                 if (webView.canGoBack()) {
                     webView.goBack()
                     return true
                 }
             }
             KeyEvent.KEYCODE_DPAD_UP -> {
-                if (controlsVisible) {
-                    btnPlayPause.requestFocus()
-                    return true
-                }
                 webView.evaluateJavascript("window.__tvNav && window.__tvNav.move('up')", null)
                 return true
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
-                webView.evaluateJavascript(
-                    """
-                    (function() {
-                        var v = document.querySelector('video');
-                        if (v && !v.paused && !controlsVisible) {
-                            showTvControls();
-                        } else {
-                            window.__tvNav && window.__tvNav.move('down');
-                        }
-                    })();
-                    """.trimIndent(), null
-                )
-                showControls()
+                webView.evaluateJavascript("window.__tvNav && window.__tvNav.move('down')", null)
                 return true
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
@@ -873,22 +858,21 @@ class MainActivity : AppCompatActivity() {
                     """
                     (function() {
                         var v = document.querySelector('video');
-                        if (v && !v.paused) { v.pause(); }
-                        else if (v && v.paused) { v.play(); }
-                        else {
-                            var iframes = document.querySelectorAll('iframe');
-                            for (var i = 0; i < iframes.length; i++) {
-                                var src = (iframes[i].src || '').toLowerCase();
-                                if (src.indexOf('vimeo') !== -1 || src.indexOf('player') !== -1) {
-                                    iframes[i].contentWindow.postMessage(JSON.stringify({method:'play'}), '*');
-                                }
+                        if (v && !v.paused) { v.pause(); return; }
+                        if (v && v.paused) { v.play(); return; }
+                        var iframes = document.querySelectorAll('iframe');
+                        for (var i = 0; i < iframes.length; i++) {
+                            var src = (iframes[i].src || '').toLowerCase();
+                            if (src.indexOf('vimeo') !== -1 || src.indexOf('player') !== -1 ||
+                                src.indexOf('vidhide') !== -1 || src.indexOf('streamwish') !== -1 ||
+                                src.indexOf('voe') !== -1) {
+                                try { iframes[i].contentWindow.postMessage(JSON.stringify({method:'play'}), '*'); } catch(e) {}
                             }
-                            window.__tvNav && window.__tvNav.click();
                         }
+                        window.__tvNav && window.__tvNav.click();
                     })();
                     """.trimIndent(), null
                 )
-                updatePlayPauseButton()
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
@@ -900,14 +884,15 @@ class MainActivity : AppCompatActivity() {
                         var iframes = document.querySelectorAll('iframe');
                         for (var i = 0; i < iframes.length; i++) {
                             var src = (iframes[i].src || '').toLowerCase();
-                            if (src.indexOf('vimeo') !== -1 || src.indexOf('player') !== -1) {
-                                iframes[i].contentWindow.postMessage(JSON.stringify({method:'play'}), '*');
+                            if (src.indexOf('vimeo') !== -1 || src.indexOf('player') !== -1 ||
+                                src.indexOf('vidhide') !== -1 || src.indexOf('streamwish') !== -1 ||
+                                src.indexOf('voe') !== -1) {
+                                try { iframes[i].contentWindow.postMessage(JSON.stringify({method:'play'}), '*'); } catch(e) {}
                             }
                         }
                     })();
                     """.trimIndent(), null
                 )
-                updatePlayPauseButton()
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_PLAY -> {
@@ -919,8 +904,10 @@ class MainActivity : AppCompatActivity() {
                         var iframes = document.querySelectorAll('iframe');
                         for (var i = 0; i < iframes.length; i++) {
                             var src = (iframes[i].src || '').toLowerCase();
-                            if (src.indexOf('vimeo') !== -1 || src.indexOf('player') !== -1) {
-                                iframes[i].contentWindow.postMessage(JSON.stringify({method:'play'}), '*');
+                            if (src.indexOf('vimeo') !== -1 || src.indexOf('player') !== -1 ||
+                                src.indexOf('vidhide') !== -1 || src.indexOf('streamwish') !== -1 ||
+                                src.indexOf('voe') !== -1) {
+                                try { iframes[i].contentWindow.postMessage(JSON.stringify({method:'play'}), '*'); } catch(e) {}
                             }
                         }
                     })();
@@ -937,8 +924,10 @@ class MainActivity : AppCompatActivity() {
                         var iframes = document.querySelectorAll('iframe');
                         for (var i = 0; i < iframes.length; i++) {
                             var src = (iframes[i].src || '').toLowerCase();
-                            if (src.indexOf('vimeo') !== -1 || src.indexOf('player') !== -1) {
-                                iframes[i].contentWindow.postMessage(JSON.stringify({method:'pause'}), '*');
+                            if (src.indexOf('vimeo') !== -1 || src.indexOf('player') !== -1 ||
+                                src.indexOf('vidhide') !== -1 || src.indexOf('streamwish') !== -1 ||
+                                src.indexOf('voe') !== -1) {
+                                try { iframes[i].contentWindow.postMessage(JSON.stringify({method:'pause'}), '*'); } catch(e) {}
                             }
                         }
                     })();
@@ -948,23 +937,13 @@ class MainActivity : AppCompatActivity() {
             }
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
                 webView.evaluateJavascript(
-                    """
-                    (function() {
-                        var v = document.querySelector('video');
-                        if (v) { v.currentTime += 10; }
-                    })();
-                    """.trimIndent(), null
+                    "var v=document.querySelector('video');if(v)v.currentTime+=10;", null
                 )
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_REWIND -> {
                 webView.evaluateJavascript(
-                    """
-                    (function() {
-                        var v = document.querySelector('video');
-                        if (v) { v.currentTime -= 10; }
-                    })();
-                    """.trimIndent(), null
+                    "var v=document.querySelector('video');if(v)v.currentTime-=10;", null
                 )
                 return true
             }
