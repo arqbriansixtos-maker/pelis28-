@@ -123,7 +123,18 @@ class MainActivity : AppCompatActivity() {
         ".adElement", ".adv-container", ".adv-banner",
         "ins.adsbygoogle", "amp-ad",
         "[id*=\"google_ads\"]",
-        "[class*=\"ad-true\"]", "[class*=\"ad-false\"]"
+        "[class*=\"ad-true\"]", "[class*=\"ad-false\"]",
+        "[class*=\"bell\"]", "[class*=\"campana\"]", "[class*=\"notif\"]",
+        "[class*=\"notification-overlay\"]", "[class*=\"push-notification\"]",
+        "[class*=\"subscribe\"]", "[class*=\"subscrib\"]",
+        ".jw-icon-notice", ".jw-overlay", ".jw-click-handler",
+        "[class*=\"overlay-player\"]", "[class*=\"player-overlay\"]",
+        "[class*=\"vast\"]", "[class*=\"preroll\"]",
+        "[class*=\"float-banner\"]", "[class*=\"sticky-banner\"]",
+        "[class*=\"click-overlay\"]", "[class*=\"click-blocker\"]",
+        "[class*=\"tap-overlay\"]", "[class*=\"tap-block\"]",
+        "[class*=\"anti-adblock\"]", "[class*=\"adblock-detect\"]",
+        "[id*=\"preroll\"]", "[id*=\"midroll\"]", "[id*=\"overlay-ad\"]"
     )
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -336,7 +347,15 @@ class MainActivity : AppCompatActivity() {
 
                 var style = document.createElement('style');
                 style.id = '__pelis28_adblock';
-                style.textContent = '$selectorStr { display: none !important; }';
+                style.textContent = '$selectorStr { display: none !important; } ' +
+                    '[class*="bell"], [class*="campana"], [class*="notif"], [class*="push-subscribe"], ' +
+                    '[class*="subscribe"], [class*="subscrib"], [class*="click-overlay"], ' +
+                    '[class*="click-blocker"], [class*="tap-overlay"], [class*="tap-block"], ' +
+                    '[class*="anti-adblock"], [class*="overlay-player"], [class*="player-overlay"], ' +
+                    '[class*="vast"], [class*="preroll"], [class*="float-banner"], ' +
+                    '[class*="sticky-banner"], [class*="notification-overlay"] ' +
+                    '{ display: none !important; } ' +
+                    '.video-container *, .player-container *, #player * { cursor: default !important; }';
                 document.head.appendChild(style);
 
                 function isAdUrl(src) {
@@ -378,6 +397,36 @@ class MainActivity : AppCompatActivity() {
                             if (bigFixed[i].querySelector('video') === null) {
                                 bigFixed[i].style.display = 'none';
                             }
+                        }
+
+                        var overlaysSobreVideo = document.querySelectorAll(
+                            'div[style*="position: fixed"], div[style*="position:fixed"], ' +
+                            'div[style*="position: absolute"][style*="z-index"], ' +
+                            'div[class*="overlay"], div[class*="modal"], div[class*="popup"]'
+                        );
+                        for (var i = overlaysSobreVideo.length - 1; i >= 0; i--) {
+                            var el = overlaysSobreVideo[i];
+                            var tieneVideo = el.querySelector('video');
+                            var tieneCampana = el.querySelector('[class*="bell"], [class*="campana"], svg, [class*="notif"]');
+                            var tieneInput = el.querySelector('input, button[class*="close"], button[class*="cerrar"]');
+                            if (!tieneVideo && (tieneCampana || el.className.toString().match(/overlay|modal|popup|notif|bell|subscribe/i))) {
+                                el.style.display = 'none';
+                                el.remove();
+                            }
+                        }
+
+                        var campanitas = document.querySelectorAll('[class*="bell"], [class*="campana"], [class*="notif"], [class*="push"], [class*="subscribe"]');
+                        for (var i = campanitas.length - 1; i >= 0; i--) {
+                            var parent = campanitas[i].closest('div, section, aside');
+                            if (parent && parent.querySelector('video') === null) {
+                                parent.style.display = 'none';
+                                parent.remove();
+                            }
+                        }
+
+                        var clickBlockers = document.querySelectorAll('[class*="click-overlay"], [class*="click-blocker"], [class*="tap-overlay"], [class*="tap-block"], [class*="anti-adblock"]');
+                        for (var i = clickBlockers.length - 1; i >= 0; i--) {
+                            clickBlockers[i].remove();
                         }
                     } catch(e) {}
                 }
@@ -469,8 +518,12 @@ class MainActivity : AppCompatActivity() {
                 });
 
                 setTimeout(eliminarAds, 500);
+                setTimeout(eliminarAds, 1500);
                 setTimeout(eliminarAds, 2000);
+                setTimeout(eliminarAds, 3000);
                 setTimeout(eliminarAds, 5000);
+                setTimeout(eliminarAds, 8000);
+                setInterval(eliminarAds, 2000);
             })();
         """.trimIndent()
 
