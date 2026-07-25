@@ -150,6 +150,127 @@ class MainActivity : AppCompatActivity() {
         webView.loadUrl(targetUrl)
     }
 
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val code = event.keyCode
+
+        if (code == KeyEvent.KEYCODE_DPAD_UP ||
+            code == KeyEvent.KEYCODE_DPAD_DOWN ||
+            code == KeyEvent.KEYCODE_DPAD_LEFT ||
+            code == KeyEvent.KEYCODE_DPAD_RIGHT ||
+            code == KeyEvent.KEYCODE_DPAD_CENTER ||
+            code == KeyEvent.KEYCODE_ENTER
+        ) {
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                val dir = when (code) {
+                    KeyEvent.KEYCODE_DPAD_UP -> "up"
+                    KeyEvent.KEYCODE_DPAD_DOWN -> "down"
+                    KeyEvent.KEYCODE_DPAD_LEFT -> "left"
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> "right"
+                    else -> null
+                }
+                if (dir != null) {
+                    webView.evaluateJavascript("window.__tvNav.move('$dir')", null)
+                } else {
+                    webView.evaluateJavascript("window.__tvNav.click()", null)
+                }
+                return true
+            }
+            if (event.action == KeyEvent.ACTION_UP) {
+                val dir = when (code) {
+                    KeyEvent.KEYCODE_DPAD_UP -> "up"
+                    KeyEvent.KEYCODE_DPAD_DOWN -> "down"
+                    KeyEvent.KEYCODE_DPAD_LEFT -> "left"
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> "right"
+                    else -> null
+                }
+                if (dir != null) {
+                    webView.evaluateJavascript("window.__tvNav.stop('$dir')", null)
+                }
+                return true
+            }
+        }
+
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            when (code) {
+                KeyEvent.KEYCODE_BACK -> {
+                    if (customView != null) {
+                        webView.webChromeClient?.onHideCustomView()
+                        return true
+                    }
+                    if (webView.canGoBack()) {
+                        webView.goBack()
+                        return true
+                    }
+                }
+                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                    webView.evaluateJavascript(
+                        """(function(){
+                            var v=document.querySelector('video');
+                            if(v){if(v.paused)v.play();else v.pause();return;}
+                            var iframes=document.querySelectorAll('iframe');
+                            for(var i=0;i<iframes.length;i++){
+                                var s=(iframes[i].src||'').toLowerCase();
+                                if(s.indexOf('vimeo')!==-1||s.indexOf('player')!==-1||s.indexOf('vidhide')!==-1||s.indexOf('streamwish')!==-1||s.indexOf('voe')!==-1){
+                                    try{iframes[i].contentWindow.postMessage(JSON.stringify({method:'play'}),'*');}catch(e){}
+                                }
+                            }
+                        })();""", null
+                    )
+                    return true
+                }
+                KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                    webView.evaluateJavascript(
+                        """(function(){
+                            var v=document.querySelector('video');
+                            if(v){v.play();return;}
+                            var iframes=document.querySelectorAll('iframe');
+                            for(var i=0;i<iframes.length;i++){
+                                var s=(iframes[i].src||'').toLowerCase();
+                                if(s.indexOf('vimeo')!==-1||s.indexOf('player')!==-1||s.indexOf('vidhide')!==-1||s.indexOf('streamwish')!==-1||s.indexOf('voe')!==-1){
+                                    try{iframes[i].contentWindow.postMessage(JSON.stringify({method:'play'}),'*');}catch(e){}
+                                }
+                            }
+                        })();""", null
+                    )
+                    return true
+                }
+                KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+                    webView.evaluateJavascript(
+                        """(function(){
+                            var v=document.querySelector('video');
+                            if(v){v.pause();return;}
+                            var iframes=document.querySelectorAll('iframe');
+                            for(var i=0;i<iframes.length;i++){
+                                var s=(iframes[i].src||'').toLowerCase();
+                                if(s.indexOf('vimeo')!==-1||s.indexOf('player')!==-1||s.indexOf('vidhide')!==-1||s.indexOf('streamwish')!==-1||s.indexOf('voe')!==-1){
+                                    try{iframes[i].contentWindow.postMessage(JSON.stringify({method:'pause'}),'*');}catch(e){}
+                                }
+                            }
+                        })();""", null
+                    )
+                    return true
+                }
+                KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                    webView.evaluateJavascript("var v=document.querySelector('video');if(v)v.currentTime+=10;", null)
+                    return true
+                }
+                KeyEvent.KEYCODE_MEDIA_REWIND -> {
+                    webView.evaluateJavascript("var v=document.querySelector('video');if(v)v.currentTime-=10;", null)
+                    return true
+                }
+                KeyEvent.KEYCODE_MENU -> {
+                    toggleFullscreen()
+                    return true
+                }
+                KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_MUTE -> {
+                    return false
+                }
+            }
+        }
+
+        return super.dispatchKeyEvent(event)
+    }
+
     private fun toggleFullscreen() {
         if (customView != null) {
             webView.webChromeClient?.onHideCustomView()
@@ -408,7 +529,6 @@ class MainActivity : AppCompatActivity() {
                             var el = overlaysSobreVideo[i];
                             var tieneVideo = el.querySelector('video');
                             var tieneCampana = el.querySelector('[class*="bell"], [class*="campana"], svg, [class*="notif"]');
-                            var tieneInput = el.querySelector('input, button[class*="close"], button[class*="cerrar"]');
                             if (!tieneVideo && (tieneCampana || el.className.toString().match(/overlay|modal|popup|notif|bell|subscribe/i))) {
                                 el.style.display = 'none';
                                 el.remove();
@@ -450,18 +570,6 @@ class MainActivity : AppCompatActivity() {
                 function bloquearPopunders() {
                     try {
                         window.open = function() { return null; };
-                        var origTarget = window.HTMLAnchorElement.prototype.__lookupSetter__('target');
-                        if (origTarget) {
-                            Object.defineProperty(window.HTMLAnchorElement.prototype, 'target', {
-                                set: function(v) {
-                                    if (v === '_blank') v = '_self';
-                                    origTarget.call(this, v);
-                                },
-                                get: function() {
-                                    return origTarget ? origTarget.call(this) : '_self';
-                                }
-                            });
-                        }
 
                         var origAssign = window.location.assign;
                         window.location.assign = function(url) {
@@ -533,108 +641,104 @@ class MainActivity : AppCompatActivity() {
     private fun inyectarNavegacionTV() {
         val js = """
             (function() {
-                if (window.__tvNavInstalado) return;
-                window.__tvNavInstalado = true;
+                if (window.__tvNav) return;
 
-                var SPEED = 25;
-                var FAST_SPEED = 60;
-                var cursorX = window.innerWidth / 2;
-                var cursorY = window.innerHeight / 2;
-                var moving = {};
+                var SPEED = 14;
+                var cx = window.innerWidth / 2;
+                var cy = window.innerHeight / 2;
+                var timers = {};
+                var active = false;
 
                 var cursor = document.createElement('div');
                 cursor.id = '__tv_cursor';
-                cursor.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;width:28px;height:28px;border:3px solid #00e5ff;border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 10px rgba(0,229,255,0.7);background:rgba(0,229,255,0.15);';
-                document.body.appendChild(cursor);
+                cursor.style.cssText = 'position:fixed !important;z-index:2147483647 !important;pointer-events:none !important;width:28px;height:28px;border:3px solid #00e5ff;border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 10px rgba(0,229,255,0.7);background:rgba(0,229,255,0.15);left:50%;top:50%;display:none;';
+                document.documentElement.appendChild(cursor);
 
-                var trail = document.createElement('div');
-                trail.style.cssText = 'position:fixed;z-index:2147483646;pointer-events:none;width:8px;height:8px;border-radius:50%;background:#00e5ff;transform:translate(-50%,-50%);opacity:0.4;transition:left 0.15s ease-out,top 0.15s ease-out;';
-                document.body.appendChild(trail);
-
-                function update() {
-                    cursor.style.left = cursorX + 'px';
-                    cursor.style.top = cursorY + 'px';
-                    trail.style.left = cursorX + 'px';
-                    trail.style.top = cursorY + 'px';
-
-                    var el = document.elementFromPoint(cursorX, cursorY);
-                    var clicky = findClickable(el);
-                    if (clicky) {
-                        cursor.style.borderColor = '#00ff88';
-                        cursor.style.boxShadow = '0 0 14px rgba(0,255,136,0.8)';
-                    } else {
-                        cursor.style.borderColor = '#00e5ff';
-                        cursor.style.boxShadow = '0 0 10px rgba(0,229,255,0.7)';
+                function showCursor() {
+                    if (!active) {
+                        active = true;
+                        cursor.style.display = 'block';
                     }
                 }
 
-                function findClickable(el) {
-                    if (!el) return null;
-                    var c = el;
-                    for (var i = 0; i < 8; i++) {
-                        if (!c || c === document.body || c === document.documentElement) break;
-                        var tag = c.tagName;
-                        var role = c.getAttribute('role');
-                        var cs = window.getComputedStyle(c).cursor;
-                        if (tag === 'A' || tag === 'BUTTON' || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' ||
-                            role === 'button' || role === 'link' || role === 'tab' || role === 'menuitem' ||
-                            c.onclick || cs === 'pointer') {
-                            return c;
-                        }
-                        c = c.parentElement;
+                window.addEventListener('keydown', function(e) {
+                    var k = e.keyCode;
+                    if (k >= 37 && k <= 40 || k === 13) {
+                        showCursor();
                     }
-                    return null;
+                }, false);
+
+                window.addEventListener('scroll', function() {
+                    if (!active) return;
+                    window.scrollTo(0, window.scrollY);
+                }, true);
+
+                function draw() {
+                    cursor.style.left = cx + 'px';
+                    cursor.style.top = cy + 'px';
+                }
+
+                function move(dir) {
+                    showCursor();
+                    if (timers[dir]) return;
+                    timers[dir] = setInterval(function() {
+                        if (dir === 'up') cy -= SPEED;
+                        if (dir === 'down') cy += SPEED;
+                        if (dir === 'left') cx -= SPEED;
+                        if (dir === 'right') cx += SPEED;
+                        if (cx < 10) cx = 10;
+                        if (cy < 10) cy = 10;
+                        if (cx > window.innerWidth - 10) cx = window.innerWidth - 10;
+                        if (cy > window.innerHeight - 10) cy = window.innerHeight - 10;
+                        draw();
+                    }, 20);
+                }
+
+                function stop(dir) {
+                    if (timers[dir]) { clearInterval(timers[dir]); timers[dir] = null; }
                 }
 
                 function doClick() {
-                    var el = document.elementFromPoint(cursorX, cursorY);
+                    if (!active) return;
+                    cursor.style.display = 'none';
+                    var el = document.elementFromPoint(cx, cy);
+                    cursor.style.display = 'block';
                     if (!el) return;
-                    var target = findClickable(el) || el;
 
-                    var opts = {bubbles: true, clientX: cursorX, clientY: cursorY, cancelable: true};
+                    var c = el;
+                    var target = el;
+                    for (var i = 0; i < 10; i++) {
+                        if (!c || c === document.body || c === document.documentElement) break;
+                        if (c.tagName === 'A' || c.tagName === 'BUTTON' || c.tagName === 'INPUT' ||
+                            c.tagName === 'SELECT' || c.tagName === 'TEXTAREA' ||
+                            c.getAttribute('role') === 'button' || c.getAttribute('role') === 'link' ||
+                            c.getAttribute('role') === 'tab' || c.getAttribute('role') === 'menuitem' ||
+                            c.onclick || window.getComputedStyle(c).cursor === 'pointer') {
+                            target = c;
+                            break;
+                        }
+                        c = c.parentElement;
+                    }
+
+                    var opts = {bubbles: true, clientX: cx, clientY: cy, cancelable: true};
                     target.dispatchEvent(new MouseEvent('mousedown', opts));
                     target.dispatchEvent(new MouseEvent('mouseup', opts));
                     target.dispatchEvent(new MouseEvent('click', opts));
 
-                    var ripple = document.createElement('div');
-                    ripple.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;width:60px;height:60px;border:2px solid #fff;border-radius:50%;transform:translate(-50%,-50%);left:' + cursorX + 'px;top:' + cursorY + 'px;opacity:1;transition:opacity 0.4s,transform 0.4s;';
-                    document.body.appendChild(ripple);
-                    setTimeout(function() { ripple.style.opacity = '0'; ripple.style.transform = 'translate(-50%,-50%) scale(1.5)'; }, 10);
-                    setTimeout(function() { ripple.remove(); }, 400);
-                }
-
-                function startMove(dir) {
-                    if (moving[dir]) return;
-                    moving[dir] = true;
-                    function step() {
-                        if (!moving[dir]) return;
-                        var s = moving.shift_key ? FAST_SPEED : SPEED;
-                        switch(dir) {
-                            case 'up': cursorY -= s; break;
-                            case 'down': cursorY += s; break;
-                            case 'left': cursorX -= s; break;
-                            case 'right': cursorX += s; break;
-                        }
-                        cursorX = Math.max(2, Math.min(window.innerWidth - 2, cursorX));
-                        cursorY = Math.max(2, Math.min(window.innerHeight - 2, cursorY));
-                        update();
-                        requestAnimationFrame(step);
-                    }
-                    step();
-                }
-
-                function stopMove(dir) {
-                    moving[dir] = false;
+                    var r = document.createElement('div');
+                    r.style.cssText = 'position:fixed !important;z-index:2147483647 !important;pointer-events:none;width:50px;height:50px;border:2px solid #fff;border-radius:50%;transform:translate(-50%,-50%);left:' + cx + 'px;top:' + cy + 'px;opacity:1;transition:opacity 0.3s;';
+                    document.documentElement.appendChild(r);
+                    setTimeout(function() { r.style.opacity = '0'; }, 10);
+                    setTimeout(function() { r.remove(); }, 350);
                 }
 
                 window.__tvNav = {
-                    move: function(dir) { startMove(dir); },
-                    stop: function(dir) { stopMove(dir); },
-                    click: doClick,
-                    shift: function(v) { moving.shift_key = v; }
+                    move: move,
+                    stop: stop,
+                    click: doClick
                 };
 
-                update();
+                draw();
             })();
         """.trimIndent()
         webView.evaluateJavascript(js, null)
@@ -722,19 +826,28 @@ class MainActivity : AppCompatActivity() {
 
                             v.muted = false;
                             v.autoplay = true;
+                            v.removeAttribute('preload');
+                            v.preload = 'auto';
 
                             v.addEventListener('loadeddata', function() {
                                 var self = this;
                                 setTimeout(function() {
                                     if (self.paused) self.play().catch(function(){});
-                                }, 300);
+                                }, 200);
                             });
 
                             v.addEventListener('canplay', function() {
                                 var self = this;
                                 setTimeout(function() {
                                     if (self.paused) self.play().catch(function(){});
-                                }, 200);
+                                }, 150);
+                            });
+
+                            v.addEventListener('canplaythrough', function() {
+                                var self = this;
+                                setTimeout(function() {
+                                    if (self.paused) self.play().catch(function(){});
+                                }, 100);
                             });
 
                             if (v.readyState >= 1) {
@@ -742,11 +855,41 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
 
-                        var playBtns = document.querySelectorAll('.vjs-big-play-button, .jw-icon-display, [aria-label*="Play"], [title*="Play"], [title*="play"]');
+                        var playBtns = document.querySelectorAll(
+                            '.vjs-big-play-button, .jw-icon-display, [aria-label*="Play"], [aria-label*="play"], ' +
+                            '[title*="Play"], [title*="play"], [title*="Reproducir"], [aria-label*="Reproducir"], ' +
+                            '.plyr__control, .plyr-play, .play-btn, .player-play, ' +
+                            '[class*="play-button"], [class*="play-btn"], [class*="playBtn"], ' +
+                            'button[aria-label*="Play"], button[title*="Play"]'
+                        );
                         for (var i = 0; i < playBtns.length; i++) {
                             if (!playBtns[i]._autoClicked) {
                                 playBtns[i]._autoClicked = true;
                                 playBtns[i].click();
+                            }
+                        }
+
+                        var bigPlayContainers = document.querySelectorAll(
+                            '.vjs-poster, .jw-display-icon-container, [class*="big-play"], ' +
+                            '[class*="play-overlay"], [class*="play-poster"]'
+                        );
+                        for (var i = 0; i < bigPlayContainers.length; i++) {
+                            if (!bigPlayContainers[i]._autoClicked) {
+                                bigPlayContainers[i]._autoClicked = true;
+                                bigPlayContainers[i].click();
+                            }
+                        }
+
+                        var iframes = document.querySelectorAll('iframe');
+                        for (var i = 0; i < iframes.length; i++) {
+                            var ifr = iframes[i];
+                            var src = (ifr.src || '').toLowerCase();
+                            if (src.indexOf('vimeo') !== -1) {
+                                ifr.contentWindow.postMessage(JSON.stringify({method:'play'}), '*');
+                            }
+                            if (src.indexOf('vidhide') !== -1 || src.indexOf('streamwish') !== -1 || src.indexOf('voe') !== -1) {
+                                ifr.contentWindow.postMessage('{"event":"play"}', '*');
+                                ifr.contentWindow.postMessage(JSON.stringify({type:'play'}), '*');
                             }
                         }
                     } catch(e) {}
@@ -779,155 +922,22 @@ class MainActivity : AppCompatActivity() {
 
                 var obs = new MutationObserver(function() {
                     setTimeout(autoSeleccionarServidor, 200);
-                    setTimeout(autoReproducir, 400);
+                    setTimeout(autoReproducir, 300);
+                    setTimeout(autoReproducir, 800);
+                    setTimeout(autoReproducir, 1500);
                     setTimeout(cerrarPopups, 100);
                 });
                 obs.observe(document.body || document.documentElement, {childList: true, subtree: true});
 
                 setTimeout(autoSeleccionarServidor, 500);
-                setTimeout(autoReproducir, 800);
+                setTimeout(autoReproducir, 600);
+                setTimeout(autoReproducir, 1000);
                 setTimeout(autoSeleccionarServidor, 2000);
                 setTimeout(autoReproducir, 2500);
+                setTimeout(autoReproducir, 4000);
             })();
         """.trimIndent()
         webView.evaluateJavascript(js, null)
-    }
-
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        when (keyCode) {
-            KeyEvent.KEYCODE_BACK -> {
-                if (customView != null) {
-                    webView.webChromeClient?.onHideCustomView()
-                    return true
-                }
-                if (webView.canGoBack()) {
-                    webView.goBack()
-                    return true
-                }
-            }
-            KeyEvent.KEYCODE_DPAD_UP -> {
-                webView.evaluateJavascript("window.__tvNav && window.__tvNav.move('up')", null)
-                return true
-            }
-            KeyEvent.KEYCODE_DPAD_DOWN -> {
-                webView.evaluateJavascript("window.__tvNav && window.__tvNav.move('down')", null)
-                return true
-            }
-            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                webView.evaluateJavascript("window.__tvNav && window.__tvNav.move('left')", null)
-                return true
-            }
-            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                webView.evaluateJavascript("window.__tvNav && window.__tvNav.move('right')", null)
-                return true
-            }
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                webView.evaluateJavascript("window.__tvNav && window.__tvNav.click()", null)
-                return true
-            }
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
-                webView.evaluateJavascript(
-                    """
-                    (function() {
-                        var v = document.querySelector('video');
-                        if (v) { if (v.paused) v.play(); else v.pause(); return; }
-                        var iframes = document.querySelectorAll('iframe');
-                        for (var i = 0; i < iframes.length; i++) {
-                            var src = (iframes[i].src || '').toLowerCase();
-                            if (src.indexOf('vimeo') !== -1 || src.indexOf('player') !== -1 ||
-                                src.indexOf('vidhide') !== -1 || src.indexOf('streamwish') !== -1 ||
-                                src.indexOf('voe') !== -1) {
-                                try { iframes[i].contentWindow.postMessage(JSON.stringify({method:'play'}), '*'); } catch(e) {}
-                            }
-                        }
-                    })();
-                    """.trimIndent(), null
-                )
-                return true
-            }
-            KeyEvent.KEYCODE_MEDIA_PLAY -> {
-                webView.evaluateJavascript(
-                    """
-                    (function() {
-                        var v = document.querySelector('video');
-                        if (v) { v.play(); return; }
-                        var iframes = document.querySelectorAll('iframe');
-                        for (var i = 0; i < iframes.length; i++) {
-                            var src = (iframes[i].src || '').toLowerCase();
-                            if (src.indexOf('vimeo') !== -1 || src.indexOf('player') !== -1 ||
-                                src.indexOf('vidhide') !== -1 || src.indexOf('streamwish') !== -1 ||
-                                src.indexOf('voe') !== -1) {
-                                try { iframes[i].contentWindow.postMessage(JSON.stringify({method:'play'}), '*'); } catch(e) {}
-                            }
-                        }
-                    })();
-                    """.trimIndent(), null
-                )
-                return true
-            }
-            KeyEvent.KEYCODE_MEDIA_PAUSE -> {
-                webView.evaluateJavascript(
-                    """
-                    (function() {
-                        var v = document.querySelector('video');
-                        if (v) { v.pause(); return; }
-                        var iframes = document.querySelectorAll('iframe');
-                        for (var i = 0; i < iframes.length; i++) {
-                            var src = (iframes[i].src || '').toLowerCase();
-                            if (src.indexOf('vimeo') !== -1 || src.indexOf('player') !== -1 ||
-                                src.indexOf('vidhide') !== -1 || src.indexOf('streamwish') !== -1 ||
-                                src.indexOf('voe') !== -1) {
-                                try { iframes[i].contentWindow.postMessage(JSON.stringify({method:'pause'}), '*'); } catch(e) {}
-                            }
-                        }
-                    })();
-                    """.trimIndent(), null
-                )
-                return true
-            }
-            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
-                webView.evaluateJavascript(
-                    "var v=document.querySelector('video');if(v)v.currentTime+=10;", null
-                )
-                return true
-            }
-            KeyEvent.KEYCODE_MEDIA_REWIND -> {
-                webView.evaluateJavascript(
-                    "var v=document.querySelector('video');if(v)v.currentTime-=10;", null
-                )
-                return true
-            }
-            KeyEvent.KEYCODE_MENU -> {
-                toggleFullscreen()
-                return true
-            }
-            KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_MUTE -> {
-                return false
-            }
-        }
-        return super.onKeyDown(keyCode, event)
-    }
-
-    override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
-        when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP -> {
-                webView.evaluateJavascript("window.__tvNav && window.__tvNav.stop('up')", null)
-                return true
-            }
-            KeyEvent.KEYCODE_DPAD_DOWN -> {
-                webView.evaluateJavascript("window.__tvNav && window.__tvNav.stop('down')", null)
-                return true
-            }
-            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                webView.evaluateJavascript("window.__tvNav && window.__tvNav.stop('left')", null)
-                return true
-            }
-            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                webView.evaluateJavascript("window.__tvNav && window.__tvNav.stop('right')", null)
-                return true
-            }
-        }
-        return super.onKeyUp(keyCode, event)
     }
 
     override fun onDestroy() {
