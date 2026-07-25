@@ -187,9 +187,6 @@ class MainActivity : AppCompatActivity() {
                 webView.evaluateJavascript("window.__tvNav && window.__tvNav.click()", null)
                 return true
             }
-            if (event.action == KeyEvent.ACTION_UP) {
-                return true
-            }
         }
 
         if (event.action == KeyEvent.ACTION_DOWN) {
@@ -299,8 +296,6 @@ class MainActivity : AppCompatActivity() {
 
         settings.javaScriptCanOpenWindowsAutomatically = false
         settings.setSupportMultipleWindows(false)
-
-        webView.addJavascriptInterface(PlayerBridge(), "AndroidBridge")
 
         webView.isFocusable = true
         webView.isFocusableInTouchMode = true
@@ -661,6 +656,32 @@ class MainActivity : AppCompatActivity() {
                 function draw() {
                     cursor.style.left = cx + 'px';
                     cursor.style.top = cy + 'px';
+                    focusElement();
+                }
+
+                function focusElement() {
+                    try {
+                        cursor.style.pointerEvents = 'none';
+                        var el = document.elementFromPoint(cx, cy);
+                        if (!el) return;
+                        var c = el;
+                        for (var i = 0; i < 15; i++) {
+                            if (!c || c === document.body || c === document.documentElement) break;
+                            if (c.tagName === 'IFRAME') { c.focus(); return; }
+                            if (c.tagName === 'A' || c.tagName === 'BUTTON' || c.tagName === 'INPUT' ||
+                                c.tagName === 'SELECT' || c.tagName === 'TEXTAREA' ||
+                                c.getAttribute('role') === 'button' || c.getAttribute('role') === 'link' ||
+                                c.getAttribute('role') === 'tab' || c.getAttribute('role') === 'menuitem' ||
+                                (c.getAttribute('tabindex') !== null && c.getAttribute('tabindex') !== '-1') ||
+                                c.tabIndex > 0 ||
+                                window.getComputedStyle(c).cursor === 'pointer') {
+                                c.focus();
+                                return;
+                            }
+                            c = c.parentElement;
+                        }
+                        if (el.tabIndex >= 0) el.focus();
+                    } catch(e) {}
                 }
 
                 function autoScroll() {
@@ -693,73 +714,35 @@ class MainActivity : AppCompatActivity() {
 
                 function stop(dir) {
                     if (timers[dir]) { clearInterval(timers[dir]); timers[dir] = null; }
+                    focusElement();
                 }
 
                 function doClick() {
-                    cursor.style.display = 'none';
-                    var el = document.elementFromPoint(cx, cy);
-                    cursor.style.display = '';
-                    if (!el) return;
-
-                    if (el.tagName === 'IFRAME') {
-                        if (window.AndroidBridge) {
-                            window.AndroidBridge.tapAt(cx, cy);
+                    try {
+                        cursor.style.display = 'none';
+                        var el = document.elementFromPoint(cx, cy);
+                        cursor.style.display = 'block';
+                        if (!el) return;
+                        var c = el;
+                        var target = el;
+                        for (var i = 0; i < 10; i++) {
+                            if (!c || c === document.body || c === document.documentElement) break;
+                            if (c.tagName === 'A' || c.tagName === 'BUTTON' || c.tagName === 'INPUT' ||
+                                c.tagName === 'SELECT' || c.tagName === 'TEXTAREA' ||
+                                c.getAttribute('role') === 'button' || c.getAttribute('role') === 'link' ||
+                                c.getAttribute('role') === 'tab' || c.getAttribute('role') === 'menuitem' ||
+                                c.onclick || window.getComputedStyle(c).cursor === 'pointer') {
+                                target = c;
+                                break;
+                            }
+                            c = c.parentElement;
                         }
-                        return;
-                    }
-
-                    var target = null;
-                    var c = el;
-                    for (var i = 0; i < 10; i++) {
-                        if (!c || c === document.body || c === document.documentElement) break;
-                        if (c.tagName === 'A' || c.tagName === 'BUTTON' || c.tagName === 'INPUT' ||
-                            c.tagName === 'SELECT' || c.tagName === 'TEXTAREA' ||
-                            c.getAttribute('role') === 'button' || c.getAttribute('role') === 'link' ||
-                            c.getAttribute('role') === 'tab' || c.getAttribute('role') === 'menuitem' ||
-                            c.onclick || window.getComputedStyle(c).cursor === 'pointer') {
-                            target = c;
-                            break;
-                        }
-                        c = c.parentElement;
-                    }
-
-                    if (target) {
                         var opts = {bubbles: true, clientX: cx, clientY: cy, cancelable: true};
                         target.dispatchEvent(new MouseEvent('mousedown', opts));
                         target.dispatchEvent(new MouseEvent('mouseup', opts));
                         target.dispatchEvent(new MouseEvent('click', opts));
-                    } else if (window.AndroidBridge) {
-                        window.AndroidBridge.tapAt(cx, cy);
-                    }
-
-                    var videos = document.querySelectorAll('video');
-                    for (var i = 0; i < videos.length; i++) {
-                        if (videos[i].paused) {
-                            videos[i].play().catch(function(){});
-                        }
-                    }
-
-                    var iframes = document.querySelectorAll('iframe');
-                    for (var i = 0; i < iframes.length; i++) {
-                        var src = (iframes[i].src || '').toLowerCase();
-                        if (src.indexOf('vimeo') !== -1 || src.indexOf('player') !== -1 ||
-                            src.indexOf('vidhide') !== -1 || src.indexOf('streamwish') !== -1 ||
-                            src.indexOf('voe') !== -1) {
-                            try {
-                                iframes[i].contentWindow.postMessage(JSON.stringify({method:'play'}), '*');
-                                iframes[i].contentWindow.postMessage('{"event":"play"}', '*');
-                            } catch(e) {}
-                        }
-                    }
-
-                    var spaceEvt = new KeyboardEvent('keydown', {key:' ', code:'Space', keyCode:32, which:32, bubbles:true});
-                    document.dispatchEvent(spaceEvt);
-
-                    var r = document.createElement('div');
-                    r.style.cssText = 'position:fixed !important;z-index:2147483647 !important;pointer-events:none;width:50px;height:50px;border:2px solid #fff;border-radius:50%;transform:translate(-50%,-50%);left:' + cx + 'px;top:' + cy + 'px;opacity:1;transition:opacity 0.3s;';
-                    document.documentElement.appendChild(r);
-                    setTimeout(function() { r.style.opacity = '0'; }, 10);
-                    setTimeout(function() { r.remove(); }, 350);
+                        target.click();
+                    } catch(e) {}
                 }
 
                 window.__tvNav = {
@@ -922,20 +905,6 @@ class MainActivity : AppCompatActivity() {
                             if (src.indexOf('vidhide') !== -1 || src.indexOf('streamwish') !== -1 || src.indexOf('voe') !== -1) {
                                 ifr.contentWindow.postMessage('{"event":"play"}', '*');
                                 ifr.contentWindow.postMessage(JSON.stringify({type:'play'}), '*');
-                            }
-
-                            if (!ifr._autoTapIntentado) {
-                                var r = ifr.getBoundingClientRect();
-                                if (r.width > 100 && r.height > 100) {
-                                    ifr._autoTapIntentado = true;
-                                    var cx2 = r.left + r.width / 2;
-                                    var cy2 = r.top + r.height / 2;
-                                    setTimeout(function(x, y) {
-                                        return function() {
-                                            if (window.AndroidBridge) window.AndroidBridge.tapAt(x, y);
-                                        };
-                                    }(cx2, cy2), 1400);
-                                }
                             }
                         }
                     } catch(e) {}
