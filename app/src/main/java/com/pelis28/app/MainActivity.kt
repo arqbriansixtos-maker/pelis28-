@@ -15,6 +15,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.ProgressBar
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import java.io.ByteArrayInputStream
 
@@ -30,6 +31,8 @@ class MainActivity : AppCompatActivity() {
 
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
+    private val navigationHistory = mutableListOf<String>()
+    private var lastBackPressTime = 0L
 
     // Allows the JavaScript cursor to request a real Android touch when content is
     // inside a cross-origin iframe or when a text field requires a native gesture.
@@ -37,6 +40,21 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun tapAt(x: Float, y: Float) {
             runOnUiThread { simulateRealTouch(x, y) }
+        }
+    }
+
+    // WebView native history misses navigation performed with history.replaceState().
+    inner class HistoryBridge {
+        @JavascriptInterface
+        fun reportUrl(url: String) {
+            runOnUiThread { registerUrlInHistory(url) }
+        }
+    }
+
+    private fun registerUrlInHistory(url: String) {
+        if (navigationHistory.isEmpty() || navigationHistory.last() != url) {
+            navigationHistory.add(url)
+            if (navigationHistory.size > 50) navigationHistory.removeAt(0)
         }
     }
 
@@ -231,6 +249,19 @@ class MainActivity : AppCompatActivity() {
                         webView.goBack()
                         return true
                     }
+                    if (navigationHistory.size > 1) {
+                        navigationHistory.removeAt(navigationHistory.lastIndex)
+                        webView.loadUrl(navigationHistory.last())
+                        return true
+                    }
+                    val now = System.currentTimeMillis()
+                    if (now - lastBackPressTime < 2000) {
+                        // Let Android close the app only after an explicit second Back.
+                    } else {
+                        lastBackPressTime = now
+                        Toast.makeText(this, "Presiona atras de nuevo para salir", Toast.LENGTH_SHORT).show()
+                        return true
+                    }
                 }
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                     webView.evaluateJavascript(
@@ -329,6 +360,7 @@ class MainActivity : AppCompatActivity() {
         settings.javaScriptCanOpenWindowsAutomatically = false
         settings.setSupportMultipleWindows(false)
         webView.addJavascriptInterface(PlayerBridge(), "AndroidBridge")
+        webView.addJavascriptInterface(HistoryBridge(), "HistoryBridge")
 
         webView.isFocusable = true
         webView.isFocusableInTouchMode = true
@@ -344,6 +376,7 @@ class MainActivity : AppCompatActivity() {
                 inyectarBloqueoAds()
                 inyectarNavegacionTV()
                 inyectarAutoPlay()
+                inyectarSeguimientoDeHistorial()
                 webView.requestFocus()
             }
 
@@ -675,8 +708,8 @@ class MainActivity : AppCompatActivity() {
             (function() {
                 if (window.__tvNav) return;
 
-                var SPEED = 10;
-                var SCROLL_ZONE = 80;
+                var SPEED = 18;
+                var SCROLL_ZONE = 110;
                 var cx = window.innerWidth / 2;
                 var cy = window.innerHeight / 2;
                 var timers = {};
@@ -720,10 +753,10 @@ class MainActivity : AppCompatActivity() {
                 function autoScroll() {
                     var vh = window.innerHeight;
                     if (cy > vh - SCROLL_ZONE) {
-                        window.scrollBy(0, 6);
+                        window.scrollBy(0, 12);
                     }
                     if (cy < SCROLL_ZONE) {
-                        window.scrollBy(0, -6);
+                        window.scrollBy(0, -12);
                     }
                 }
 
@@ -742,7 +775,7 @@ class MainActivity : AppCompatActivity() {
                         if (cy > vh - 5) cy = vh - 5;
                         draw();
                         autoScroll();
-                    }, 25);
+                    }, 20);
                 }
 
                 function stop(dir) {
@@ -761,7 +794,7 @@ class MainActivity : AppCompatActivity() {
                             return;
                         }
                         var c = el;
-                        var target = el;
+                        var target = null;
                         for (var i = 0; i < 10; i++) {
                             if (!c || c === document.body || c === document.documentElement) break;
                             if (c.tagName === 'A' || c.tagName === 'BUTTON' || c.tagName === 'INPUT' ||
@@ -773,6 +806,10 @@ class MainActivity : AppCompatActivity() {
                                 break;
                             }
                             c = c.parentElement;
+                        }
+                        if (!target) {
+                            if (window.AndroidBridge) window.AndroidBridge.tapAt(cx, cy);
+                            return;
                         }
                         var isTextField = (target.tagName === 'INPUT' &&
                             ['text','search','email','tel','password','url','number'].indexOf((target.type || 'text').toLowerCase()) !== -1) ||
@@ -798,6 +835,36 @@ class MainActivity : AppCompatActivity() {
                 };
 
                 draw();
+            })();
+        """.trimIndent()
+        webView.evaluateJavascript(js, null)
+    }
+
+    private fun inyectarSeguimientoDeHistorial() {
+        val js = """
+            (function() {
+                if (window.__historyBridgeInstalled) return;
+                window.__historyBridgeInstalled = true;
+
+                function report() {
+                    if (window.HistoryBridge) window.HistoryBridge.reportUrl(location.href);
+                }
+
+                var originalPushState = history.pushState;
+                history.pushState = function() {
+                    originalPushState.apply(history, arguments);
+                    report();
+                };
+
+                var originalReplaceState = history.replaceState;
+                history.replaceState = function() {
+                    originalReplaceState.apply(history, arguments);
+                    report();
+                };
+
+                window.addEventListener('popstate', report);
+                window.addEventListener('hashchange', report);
+                report();
             })();
         """.trimIndent()
         webView.evaluateJavascript(js, null)
