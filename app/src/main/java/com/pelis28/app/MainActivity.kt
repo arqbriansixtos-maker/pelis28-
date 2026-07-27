@@ -1,11 +1,13 @@
 package com.pelis28.app
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -40,6 +42,19 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun tapAt(x: Float, y: Float) {
             runOnUiThread { simulateRealTouch(x, y) }
+        }
+
+        @JavascriptInterface
+        fun focusTextInput(x: Float, y: Float) {
+            runOnUiThread {
+                simulateRealTouch(x, y)
+                webView.requestFocus()
+                webView.postDelayed({
+                    val inputMethodManager =
+                        getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                    inputMethodManager.showSoftInput(webView, InputMethodManager.SHOW_IMPLICIT)
+                }, 120)
+            }
         }
     }
 
@@ -241,27 +256,7 @@ class MainActivity : AppCompatActivity() {
         if (event.action == KeyEvent.ACTION_DOWN) {
             when (code) {
                 KeyEvent.KEYCODE_BACK -> {
-                    if (customView != null) {
-                        webView.webChromeClient?.onHideCustomView()
-                        return true
-                    }
-                    if (webView.canGoBack()) {
-                        webView.goBack()
-                        return true
-                    }
-                    if (navigationHistory.size > 1) {
-                        navigationHistory.removeAt(navigationHistory.lastIndex)
-                        webView.loadUrl(navigationHistory.last())
-                        return true
-                    }
-                    val now = System.currentTimeMillis()
-                    if (now - lastBackPressTime < 2000) {
-                        // Let Android close the app only after an explicit second Back.
-                    } else {
-                        lastBackPressTime = now
-                        Toast.makeText(this, "Presiona atras de nuevo para salir", Toast.LENGTH_SHORT).show()
-                        return true
-                    }
+                    if (handleBackNavigation()) return true
                 }
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                     webView.evaluateJavascript(
@@ -330,6 +325,32 @@ class MainActivity : AppCompatActivity() {
         }
 
         return super.dispatchKeyEvent(event)
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        if (!handleBackNavigation()) super.onBackPressed()
+    }
+
+    private fun handleBackNavigation(): Boolean {
+        if (customView != null) {
+            webView.webChromeClient?.onHideCustomView()
+            return true
+        }
+        if (webView.canGoBack()) {
+            webView.goBack()
+            return true
+        }
+        if (navigationHistory.size > 1) {
+            navigationHistory.removeAt(navigationHistory.lastIndex)
+            webView.loadUrl(navigationHistory.last())
+            return true
+        }
+        val now = System.currentTimeMillis()
+        if (now - lastBackPressTime < 2000) return false
+        lastBackPressTime = now
+        Toast.makeText(this, "Presiona atras de nuevo para salir", Toast.LENGTH_SHORT).show()
+        return true
     }
 
     private fun toggleFullscreen() {
@@ -708,8 +729,8 @@ class MainActivity : AppCompatActivity() {
             (function() {
                 if (window.__tvNav) return;
 
-                var SPEED = 18;
-                var SCROLL_ZONE = 110;
+                var SPEED = 22;
+                var SCROLL_ZONE = 140;
                 var cx = window.innerWidth / 2;
                 var cy = window.innerHeight / 2;
                 var timers = {};
@@ -722,41 +743,15 @@ class MainActivity : AppCompatActivity() {
                 function draw() {
                     cursor.style.left = cx + 'px';
                     cursor.style.top = cy + 'px';
-                    focusElement();
-                }
-
-                function focusElement() {
-                    try {
-                        cursor.style.pointerEvents = 'none';
-                        var el = document.elementFromPoint(cx, cy);
-                        if (!el) return;
-                        var c = el;
-                        for (var i = 0; i < 15; i++) {
-                            if (!c || c === document.body || c === document.documentElement) break;
-                            if (c.tagName === 'IFRAME') { c.focus(); return; }
-                            if (c.tagName === 'A' || c.tagName === 'BUTTON' || c.tagName === 'INPUT' ||
-                                c.tagName === 'SELECT' || c.tagName === 'TEXTAREA' ||
-                                c.getAttribute('role') === 'button' || c.getAttribute('role') === 'link' ||
-                                c.getAttribute('role') === 'tab' || c.getAttribute('role') === 'menuitem' ||
-                                (c.getAttribute('tabindex') !== null && c.getAttribute('tabindex') !== '-1') ||
-                                c.tabIndex > 0 ||
-                                window.getComputedStyle(c).cursor === 'pointer') {
-                                c.focus();
-                                return;
-                            }
-                            c = c.parentElement;
-                        }
-                        if (el.tabIndex >= 0) el.focus();
-                    } catch(e) {}
                 }
 
                 function autoScroll() {
                     var vh = window.innerHeight;
                     if (cy > vh - SCROLL_ZONE) {
-                        window.scrollBy(0, 12);
+                        window.scrollBy(0, 30);
                     }
                     if (cy < SCROLL_ZONE) {
-                        window.scrollBy(0, -12);
+                        window.scrollBy(0, -30);
                     }
                 }
 
@@ -775,12 +770,11 @@ class MainActivity : AppCompatActivity() {
                         if (cy > vh - 5) cy = vh - 5;
                         draw();
                         autoScroll();
-                    }, 20);
+                    }, 16);
                 }
 
                 function stop(dir) {
                     if (timers[dir]) { clearInterval(timers[dir]); timers[dir] = null; }
-                    focusElement();
                 }
 
                 function doClick() {
@@ -815,7 +809,7 @@ class MainActivity : AppCompatActivity() {
                             ['text','search','email','tel','password','url','number'].indexOf((target.type || 'text').toLowerCase()) !== -1) ||
                             target.tagName === 'TEXTAREA' || target.isContentEditable;
                         if (isTextField && window.AndroidBridge) {
-                            window.AndroidBridge.tapAt(cx, cy);
+                            window.AndroidBridge.focusTextInput(cx, cy);
                             return;
                         }
                         var opts = {bubbles: true, clientX: cx, clientY: cy, cancelable: true};
