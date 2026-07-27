@@ -2,8 +2,11 @@ package com.pelis28.app
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
+import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -17,12 +20,39 @@ import java.io.ByteArrayInputStream
 
 class MainActivity : AppCompatActivity() {
 
+    private companion object {
+        const val VISUAL_ZOOM_PERCENT = 80
+    }
+
     private lateinit var webView: WebView
     private lateinit var fullscreenContainer: FrameLayout
     private lateinit var progressBar: ProgressBar
 
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
+
+    // Allows the JavaScript cursor to request a real Android touch when content is
+    // inside a cross-origin iframe or when a text field requires a native gesture.
+    inner class PlayerBridge {
+        @JavascriptInterface
+        fun tapAt(x: Float, y: Float) {
+            runOnUiThread { simulateRealTouch(x, y) }
+        }
+    }
+
+    private fun simulateRealTouch(cssX: Float, cssY: Float) {
+        @Suppress("DEPRECATION")
+        val currentScale = webView.scale
+        val x = cssX * currentScale
+        val y = cssY * currentScale
+        val downTime = SystemClock.uptimeMillis()
+        val down = MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, x, y, 0)
+        val up = MotionEvent.obtain(downTime, downTime + 80, MotionEvent.ACTION_UP, x, y, 0)
+        webView.dispatchTouchEvent(down)
+        webView.dispatchTouchEvent(up)
+        down.recycle()
+        up.recycle()
+    }
 
     private val targetUrl = "https://repelis28.org/peliculas"
 
@@ -187,6 +217,7 @@ class MainActivity : AppCompatActivity() {
                 webView.evaluateJavascript("window.__tvNav && window.__tvNav.click()", null)
                 return true
             }
+            if (event.action == KeyEvent.ACTION_UP) return true
         }
 
         if (event.action == KeyEvent.ACTION_DOWN) {
@@ -287,8 +318,9 @@ class MainActivity : AppCompatActivity() {
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
         settings.databaseEnabled = true
-        settings.loadWithOverviewMode = true
+        settings.loadWithOverviewMode = false
         settings.useWideViewPort = true
+        webView.setInitialScale(VISUAL_ZOOM_PERCENT)
         settings.mediaPlaybackRequiresUserGesture = false
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         settings.cacheMode = WebSettings.LOAD_DEFAULT
@@ -296,6 +328,7 @@ class MainActivity : AppCompatActivity() {
 
         settings.javaScriptCanOpenWindowsAutomatically = false
         settings.setSupportMultipleWindows(false)
+        webView.addJavascriptInterface(PlayerBridge(), "AndroidBridge")
 
         webView.isFocusable = true
         webView.isFocusableInTouchMode = true
@@ -723,6 +756,10 @@ class MainActivity : AppCompatActivity() {
                         var el = document.elementFromPoint(cx, cy);
                         cursor.style.display = 'block';
                         if (!el) return;
+                        if (el.tagName === 'IFRAME') {
+                            if (window.AndroidBridge) window.AndroidBridge.tapAt(cx, cy);
+                            return;
+                        }
                         var c = el;
                         var target = el;
                         for (var i = 0; i < 10; i++) {
@@ -736,6 +773,13 @@ class MainActivity : AppCompatActivity() {
                                 break;
                             }
                             c = c.parentElement;
+                        }
+                        var isTextField = (target.tagName === 'INPUT' &&
+                            ['text','search','email','tel','password','url','number'].indexOf((target.type || 'text').toLowerCase()) !== -1) ||
+                            target.tagName === 'TEXTAREA' || target.isContentEditable;
+                        if (isTextField && window.AndroidBridge) {
+                            window.AndroidBridge.tapAt(cx, cy);
+                            return;
                         }
                         var opts = {bubbles: true, clientX: cx, clientY: cy, cancelable: true};
                         target.dispatchEvent(new MouseEvent('mousedown', opts));
